@@ -129,7 +129,7 @@ export function getNewsProvider(): NewsProvider {
   
   // Force mock provider for now to avoid API issues
   if (false && apiKey) {
-    return new CryptoPanicProvider(apiKey);
+    return new CryptoPanicProvider(apiKey as string);
   }
   
   return new MockNewsProvider();
