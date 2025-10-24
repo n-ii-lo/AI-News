@@ -119,24 +119,26 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
       </div>
 
       {/* Controls */}
-      <div className="space-y-3 pt-2 border-t">
-        <div className="space-y-2">
+      <div className="space-y-6 pt-4 border-t">
+        <div className="space-y-4">
           <label className="text-xs font-medium text-muted-foreground">
             Sensitivity: {sensitivity}
           </label>
-          <Slider
-            value={[sensitivity === 'conservative' ? 0 : sensitivity === 'moderate' ? 1 : 2]}
-            onValueChange={([value]) => {
-              const newSensitivity = value === 0 ? 'conservative' : 
-                                   value === 1 ? 'moderate' : 'aggressive';
-              setSensitivity(newSensitivity);
-            }}
-            max={2}
-            min={0}
-            step={1}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground">
+          <div className="px-2">
+            <Slider
+              value={[sensitivity === 'conservative' ? 0 : sensitivity === 'moderate' ? 1 : 2]}
+              onValueChange={([value]) => {
+                const newSensitivity = value === 0 ? 'conservative' : 
+                                     value === 1 ? 'moderate' : 'aggressive';
+                setSensitivity(newSensitivity);
+              }}
+              max={2}
+              min={0}
+              step={1}
+              className="w-full"
+            />
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground px-2">
             <span>Conservative</span>
             <span>Aggressive</span>
           </div>

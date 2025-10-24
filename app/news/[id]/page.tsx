@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -20,22 +19,16 @@ interface NewsDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function NewsDetailPage({ params }: NewsDetailPageProps) {
-  const [id, setId] = useState<string>('');
-  
-  useEffect(() => {
-    params.then(({ id: newsId }) => setId(newsId));
-  }, [params]);
+export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
+  const { id } = await params;
   
   const { data: analysis, isLoading, error, refetch } = useQuery({
     queryKey: ['analysis', id],
     queryFn: async () => {
-      if (!id) return null;
       const response = await fetch(`/api/analyses?news_id=${id}`);
       if (!response.ok) throw new Error('Failed to fetch analysis');
       return response.json() as Promise<Analysis & { news: News }>;
     },
-    enabled: !!id,
   });
 
   if (isLoading) {
@@ -74,7 +67,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
         <div className="space-y-4">
           {/* Image */}
           {news.image_url && (
-            <div className="relative w-full h-48 rounded-lg overflow-hidden">
+            <div className="relative w-full h-48 rounded-none overflow-hidden">
               <Image
                 src={news.image_url}
                 alt=""

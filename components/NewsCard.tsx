@@ -55,7 +55,7 @@ export function NewsCard({ news, onClick, isSelected, isActive }: NewsCardProps)
   return (
     <Card 
       className={`
-        p-4 cursor-pointer transition-all duration-200 hover:bg-accent/50
+        p-6 cursor-pointer transition-all duration-200 hover:bg-accent/50 rounded-none border-l-0 border-r-0 border-t-0
         ${isSelected ? 'bg-accent border-primary' : ''}
         ${isActive ? 'ring-2 ring-primary' : ''}
       `}
@@ -78,11 +78,11 @@ export function NewsCard({ news, onClick, isSelected, isActive }: NewsCardProps)
               src={news.image_url}
               alt=""
               fill
-              className="object-cover rounded-md"
+              className="object-cover rounded-none"
               sizes="64px"
             />
           ) : (
-            <div className="w-full h-full bg-muted rounded-md flex items-center justify-center">
+            <div className="w-full h-full bg-muted rounded-none flex items-center justify-center">
               <span className="text-xs text-muted-foreground">
                 {extractDomain(news.url).substring(0, 2).toUpperCase()}
               </span>
