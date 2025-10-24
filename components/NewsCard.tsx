@@ -55,7 +55,7 @@ export function NewsCard({ news, onClick, isSelected, isActive }: NewsCardProps)
   return (
     <Card 
       className={`
-        p-6 cursor-pointer transition-all duration-200 hover:bg-accent/50 rounded-none border-l-0 border-r-0 border-t-0
+        p-4 cursor-pointer transition-all duration-200 hover:bg-accent/50 rounded-none border-l-0 border-r-0 border-t-0
         ${isSelected ? 'bg-accent border-primary' : ''}
         ${isActive ? 'ring-2 ring-primary' : ''}
       `}

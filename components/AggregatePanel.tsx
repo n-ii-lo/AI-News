@@ -45,7 +45,7 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
   if (isLoading) {
     return (
       <Card className={`p-4 ${className}`}>
-        <div className="animate-pulse space-y-4">
+        <div className="animate-pulse space-y-3">
           <div className="h-4 bg-muted rounded w-3/4"></div>
           <div className="h-8 bg-muted rounded"></div>
           <div className="space-y-2">
@@ -73,7 +73,7 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
   const confidencePercentage = Math.round(summary.overall.confidence * 100);
 
   return (
-    <Card className={`p-4 space-y-4 ${className}`}>
+    <Card className={`p-4 space-y-3 ${className}`}>
       {/* Header */}
       <div className="space-y-2">
         <h3 className="font-semibold text-sm">Tomorrow Verdict</h3>
@@ -119,12 +119,12 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
       </div>
 
       {/* Controls */}
-      <div className="space-y-6 pt-4 border-t">
-        <div className="space-y-4">
+      <div className="space-y-4 pt-3 border-t">
+        <div className="space-y-3">
           <label className="text-xs font-medium text-muted-foreground">
             Sensitivity: {sensitivity}
           </label>
-          <div className="px-2">
+          <div className="px-1">
             <Slider
               value={[sensitivity === 'conservative' ? 0 : sensitivity === 'moderate' ? 1 : 2]}
               onValueChange={([value]) => {
@@ -138,7 +138,7 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
               className="w-full"
             />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground px-2">
+          <div className="flex justify-between text-xs text-muted-foreground px-1">
             <span>Conservative</span>
             <span>Aggressive</span>
           </div>

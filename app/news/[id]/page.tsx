@@ -33,7 +33,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <Skeletons />
       </div>
     );
@@ -41,7 +41,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
 
   if (error || !analysis) {
     return (
-      <div className="p-6">
+      <div className="p-4">
         <ErrorState 
           message="Failed to load analysis"
           onRetry={() => refetch()}
@@ -53,7 +53,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
   const { news, verdict } = analysis;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-4">
       {/* Back button */}
       <Button variant="ghost" size="sm" asChild>
         <Link href="/news" className="flex items-center gap-2">
@@ -63,8 +63,8 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
       </Button>
 
       {/* News Header */}
-      <Card className="p-6">
-        <div className="space-y-4">
+      <Card className="p-4">
+        <div className="space-y-3">
           {/* Image */}
           {news.image_url && (
             <div className="relative w-full h-48 rounded-none overflow-hidden">
@@ -79,7 +79,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
           )}
 
           {/* Title and Meta */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <h1 className="text-2xl font-bold leading-tight">{news.title}</h1>
             
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -119,7 +119,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
 
       {/* Analysis Status */}
       {analysis.status === 'processing' && (
-        <Card className="p-6">
+        <Card className="p-4">
           <div className="flex items-center justify-center space-x-2">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
             <span className="text-sm text-muted-foreground">Analyzing...</span>
@@ -128,7 +128,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
       )}
 
       {analysis.status === 'error' && (
-        <Card className="p-6">
+        <Card className="p-4">
           <div className="text-center text-red-500">
             <p className="font-medium">Analysis failed</p>
             <p className="text-sm text-muted-foreground mt-1">
@@ -140,10 +140,10 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
 
       {/* Verdict */}
       {verdict && analysis.status === 'done' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Overall Verdict */}
-          <Card className="p-6">
-            <div className="space-y-4">
+          <Card className="p-4">
+            <div className="space-y-3">
               <h2 className="text-lg font-semibold">AI Verdict</h2>
               
               <div className="space-y-3">
@@ -175,13 +175,13 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
           </Card>
 
           {/* Per-Coin Verdicts */}
-          <Card className="p-6">
-            <div className="space-y-4">
+          <Card className="p-4">
+            <div className="space-y-3">
               <h2 className="text-lg font-semibold">Coin Impact</h2>
               
               <VerdictPills verdict={verdict} />
               
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">BTC</h3>
                   <ConfidenceBar 
