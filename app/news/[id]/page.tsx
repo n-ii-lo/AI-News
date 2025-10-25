@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -19,8 +20,12 @@ interface NewsDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
-  const { id } = await params;
+export default function NewsDetailPage({ params }: NewsDetailPageProps) {
+  const [id, setId] = React.useState<string | null>(null);
+  
+  React.useEffect(() => {
+    params.then(({ id }) => setId(id));
+  }, [params]);
   
   const { data: analysis, isLoading, error, refetch } = useQuery({
     queryKey: ['analysis', id],
@@ -29,6 +34,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
       if (!response.ok) throw new Error('Failed to fetch analysis');
       return response.json() as Promise<Analysis & { news: News }>;
     },
+    enabled: !!id,
   });
 
   if (isLoading) {

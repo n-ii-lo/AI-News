@@ -47,37 +47,45 @@ export default function NewsLayout({
 
       {/* Mobile Layout */}
       <div className="md:hidden">
-        <Tabs defaultValue="feed" className="h-screen flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="feed">Feed</TabsTrigger>
-            <TabsTrigger value="verdict">Verdict</TabsTrigger>
-            <TabsTrigger value="tomorrow">Tomorrow</TabsTrigger>
-          </TabsList>
+        <div className="h-screen flex flex-col">
+          {/* Mobile Header */}
+          <div className="px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <h1 className="text-lg font-semibold">Crypto News Oracle</h1>
+            <p className="text-xs text-muted-foreground">AI-powered market predictions</p>
+          </div>
           
-          <TabsContent value="feed" className="flex-1 overflow-hidden">
-            <div className="h-full">
-              <div className="p-4 border-b border-border">
-                <h2 className="font-semibold text-sm">News Feed</h2>
-              </div>
-              <NewsList 
-                onSelectNews={setSelectedNews}
-                selectedNewsId={selectedNews?.id}
-              />
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="verdict" className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
-              {children}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="tomorrow" className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto p-4">
-              <AggregatePanel />
-            </div>
-          </TabsContent>
-        </Tabs>
+          {/* Mobile Content */}
+          <div className="flex-1 overflow-hidden">
+            <Tabs defaultValue="feed" className="h-full flex flex-col">
+              <TabsList className="grid w-full grid-cols-3 mx-4 mt-2">
+                <TabsTrigger value="feed" className="text-xs">Feed</TabsTrigger>
+                <TabsTrigger value="verdict" className="text-xs">Verdict</TabsTrigger>
+                <TabsTrigger value="tomorrow" className="text-xs">Tomorrow</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="feed" className="flex-1 overflow-hidden px-4">
+                <div className="h-full pt-2">
+                  <NewsList 
+                    onSelectNews={setSelectedNews}
+                    selectedNewsId={selectedNews?.id}
+                  />
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="verdict" className="flex-1 overflow-hidden px-4">
+                <div className="h-full overflow-y-auto pt-2">
+                  {children}
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="tomorrow" className="flex-1 overflow-hidden px-4">
+                <div className="h-full overflow-y-auto pt-2">
+                  <AggregatePanel />
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </div>
     </div>
   );

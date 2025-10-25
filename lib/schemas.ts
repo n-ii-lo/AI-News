@@ -96,3 +96,15 @@ export interface CoinGeckoPrice {
     usd_24h_change: number;
   };
 }
+
+// Realtime stream types
+export interface StreamInsertEvent {
+  type: 'insert';
+  items: News[];
+  cursor: string;
+}
+
+export interface StreamHeartbeat {
+  type: 'heartbeat';
+  ts: number;
+}

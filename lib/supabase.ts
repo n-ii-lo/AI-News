@@ -226,5 +226,46 @@ export const db = {
     
     if (dbError) throw dbError;
     return data as Job;
+  },
+
+  // Realtime subscriptions
+  async subscribeToNewsInserts(
+    onInsert: (news: News) => void,
+    filters?: {
+      cursor?: string;
+      tickers?: string[];
+      status?: string;
+    }
+  ) {
+    const channel = supabase
+      .channel('news-inserts')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'news',
+      }, (payload) => {
+        const newNews = payload.new as News;
+        
+        // Apply filters
+        if (filters?.cursor && new Date(newNews.published_at) <= new Date(filters.cursor)) {
+          return;
+        }
+        
+        if (filters?.tickers && filters.tickers.length > 0) {
+          const hasMatchingTicker = newNews.tickers.some(ticker => 
+            filters.tickers!.includes(ticker)
+          );
+          if (!hasMatchingTicker) return;
+        }
+        
+        if (filters?.status && newNews.status !== filters.status) {
+          return;
+        }
+        
+        onInsert(newNews);
+      })
+      .subscribe();
+
+    return channel;
   }
 };

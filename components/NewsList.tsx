@@ -89,7 +89,7 @@ export function NewsList({ onSelectNews, selectedNewsId }: NewsListProps) {
   return (
     <div 
       ref={listRef}
-      className="h-full overflow-y-auto"
+      className="h-full overflow-y-auto space-y-3"
       role="list"
       aria-label="News list"
     >

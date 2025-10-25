@@ -73,20 +73,18 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
   const confidencePercentage = Math.round(summary.overall.confidence * 100);
 
   return (
-    <Card className={`p-4 space-y-3 ${className}`}>
+    <Card className={`p-4 space-y-4 ${className}`}>
       {/* Header */}
-      <div className="space-y-2">
-        <h3 className="font-semibold text-sm">Tomorrow Verdict</h3>
-        <div className="flex items-center gap-2">
-          <Badge 
-            variant="outline" 
-            className={`px-3 py-1 ${getBiasColor(summary.overall.bias)}`}
-          >
-            {summary.overall.bias.toUpperCase()}
-          </Badge>
-          <span className="text-xs text-muted-foreground">
-            Confidence {confidencePercentage}%
-          </span>
+      <div className="text-center space-y-3">
+        <h3 className="font-semibold text-lg">Tomorrow Verdict</h3>
+        <Badge 
+          variant="outline" 
+          className={`px-6 py-3 text-lg ${getBiasColor(summary.overall.bias)}`}
+        >
+          {summary.overall.bias.toUpperCase()}
+        </Badge>
+        <div className="text-sm text-muted-foreground">
+          Confidence {confidencePercentage}%
         </div>
       </div>
 
@@ -97,7 +95,7 @@ export function AggregatePanel({ className }: AggregatePanelProps) {
       />
 
       {/* Per-coin cards */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <AggregateCoinCard 
           symbol="BTC"
           direction={summary.BTC.direction}

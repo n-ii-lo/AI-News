@@ -176,4 +176,32 @@
   .animate-pulse {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
+
+  /* Analysis border animation */
+  @keyframes analysis-border {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+  
+  .animate-analysis-border {
+    background: linear-gradient(
+      45deg,
+      #3b82f6,
+      #8b5cf6,
+      #06b6d4,
+      #10b981,
+      #f59e0b,
+      #ef4444,
+      #3b82f6
+    );
+    background-size: 400% 400%;
+    animation: analysis-border 3s ease infinite;
+  }
 }
