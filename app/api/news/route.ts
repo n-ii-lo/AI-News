@@ -1,28 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
 import { createHash } from 'crypto';
+import type { News } from '@/lib/schemas';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
     const cursor = searchParams.get('cursor');
-    const after = searchParams.get('after'); // New parameter for delta requests
+    const after = searchParams.get('after'); // New parameter for delta requests - get NEWER news
     const limit = parseInt(searchParams.get('limit') || '20');
     const tickers = searchParams.get('tickers')?.split(',').filter(Boolean) || [];
     const status = searchParams.get('status');
     const search = searchParams.get('q');
 
-    // Use 'after' parameter for delta requests, fallback to 'cursor' for pagination
-    const timeFilter = after || cursor;
-
-    const news = await db.getNews({
-      cursor: timeFilter || undefined,
-      limit,
-      tickers: tickers.length > 0 ? tickers : undefined,
-      status: status || undefined,
-      search: search || undefined
-    });
+    // Handle 'after' parameter for realtime updates - get NEWER news
+    let news: News[];
+    if (after) {
+      // Get news NEWER than after timestamp
+      news = await db.getNewsAfter(after, limit);
+    } else if (cursor) {
+      // Get news OLDER than cursor for pagination
+      news = await db.getNews({
+        cursor,
+        limit,
+        tickers: tickers.length > 0 ? tickers : undefined,
+        status: status || undefined,
+        search: search || undefined
+      });
+    } else {
+      // Get all news (initial load)
+      news = await db.getNews({
+        limit,
+        tickers: tickers.length > 0 ? tickers : undefined,
+        status: status || undefined,
+        search: search || undefined
+      });
+    }
 
     // Generate ETag from news IDs and updated timestamps
     const etagData = news.map(item => `${item.id}:${item.inserted_at}`).join('|');

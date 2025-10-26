@@ -36,6 +36,11 @@ export function NewsFeed({ className = '' }: NewsFeedProps) {
   const initialItems = initialData?.data || [];
   const initialCursor = initialItems.length > 0 ? initialItems[0].published_at : new Date().toISOString();
 
+  // State for pagination
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [allNews, setAllNews] = useState<News[]>([]);
+
   // Background feed management
   const {
     visible,
@@ -54,6 +59,67 @@ export function NewsFeed({ className = '' }: NewsFeedProps) {
     maxBuffer: 200,
     maxVisible: 500,
   });
+
+  // Update allNews when visible changes for pagination
+  useEffect(() => {
+    if (visible.length > 0) {
+      setAllNews(visible);
+    }
+  }, [visible]);
+
+  // Load more function for pagination
+  const loadMore = async () => {
+    if (isLoadingMore || !hasMore || allNews.length === 0) return;
+    
+    setIsLoadingMore(true);
+    
+    try {
+      const lastItem = allNews[allNews.length - 1];
+      const response = await fetch(`/api/news?cursor=${lastItem.published_at}&limit=20`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to load more news');
+      }
+      
+      const data = await response.json();
+      
+      if (data.data && data.data.length > 0) {
+        setAllNews(prev => [...prev, ...data.data]);
+        setHasMore(data.hasMore);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Failed to load more news:', error);
+      setHasMore(false);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore && hasMore) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    // Observe the last item
+    const observerTarget = document.querySelector('[data-last-item]');
+    if (observerTarget) {
+      observer.observe(observerTarget);
+    }
+
+    return () => {
+      if (observerTarget) {
+        observer.unobserve(observerTarget);
+      }
+    };
+  }, [allNews.length, isLoadingMore, hasMore]);
 
   // Stable merge for scroll preservation
   const { captureAnchor, restoreAnchor } = useStableMerge({
@@ -100,7 +166,7 @@ export function NewsFeed({ className = '' }: NewsFeedProps) {
 
   // Virtualization setup
   const virtualizer = useVirtualizer({
-    count: visible.length,
+    count: allNews.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 300, // Estimated item height
     overscan: 5,
@@ -214,12 +280,15 @@ export function NewsFeed({ className = '' }: NewsFeedProps) {
           }}
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
-            const news = visible[virtualItem.index];
+            const news = allNews[virtualItem.index];
             if (!news) return null;
+
+            const isLast = virtualItem.index === allNews.length - 1;
 
             return (
               <div
                 key={news.id}
+                data-last-item={isLast ? true : undefined}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -231,6 +300,17 @@ export function NewsFeed({ className = '' }: NewsFeedProps) {
               >
                 <div className="p-4">
                   <NewsFeedItem news={news} />
+                  {isLast && isLoadingMore && (
+                    <div className="mt-4 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                      <p className="text-sm text-muted-foreground mt-2">Loading more...</p>
+                    </div>
+                  )}
+                  {isLast && !hasMore && allNews.length > 10 && (
+                    <div className="mt-4 text-center text-muted-foreground">
+                      <p className="text-sm">No more news to load</p>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -241,7 +321,7 @@ export function NewsFeed({ className = '' }: NewsFeedProps) {
       {/* Footer */}
       <div className="flex items-center justify-between p-3 border-t border-border bg-muted/50">
         <div className="text-xs text-muted-foreground">
-          {visible.length} items • {staged.length} staged
+          {allNews.length} items • {staged.length} staged
         </div>
         {!isConnected && isOnline && (
           <button

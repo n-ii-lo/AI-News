@@ -46,12 +46,8 @@ export async function GET(request: NextRequest) {
             return;
           }
           
-          // Get new news since last cursor
-          const newNews = await db.getNews({
-            cursor: lastCursor,
-            limit: 50
-            // No status filter - get all new news regardless of status
-          });
+          // Get new news since last cursor - НОВЫЕ новости
+          const newNews = await db.getNewsAfter(lastCursor, 50);
           
           if (newNews.length > 0) {
             // Update cursor to the latest item

@@ -73,6 +73,18 @@ export const db = {
     return data as News[];
   },
 
+  async getNewsAfter(cursor: string, limit = 50) {
+    const { data, error } = await supabase
+      .from('news')
+      .select('*')
+      .gt('published_at', cursor) // Greater than - НОВЕЕ чем cursor
+      .order('published_at', { ascending: false })
+      .limit(limit);
+    
+    if (error) throw error;
+    return data as News[];
+  },
+
   async getNewsById(id: string) {
     const { data, error } = await supabase
       .from('news')
