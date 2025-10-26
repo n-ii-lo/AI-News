@@ -1,26 +1,18 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { NewsList } from '@/components/NewsList';
 import { AggregatePanel } from '@/components/AggregatePanel';
+import { NewsDetailView } from '@/components/NewsDetailView';
 import { useState } from 'react';
 import type { News } from '@/lib/schemas';
 
 export default function HomePage() {
-  const router = useRouter();
   const [selectedNews, setSelectedNews] = useState<News | null>(null);
   
-  // Fetch first news to redirect to details
-  const { data, isLoading } = useQuery({
-    queryKey: ['news', 'first'],
-    queryFn: async () => {
-      const res = await fetch('/api/news?limit=1');
-      if (!res.ok) throw new Error('Failed');
-      return res.json();
-    },
-  });
+  const handleSelectNews = (news: News) => {
+    console.log('[HomePage] 📰 Selected news:', news.id);
+    setSelectedNews(news);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,10 +25,7 @@ export default function HomePage() {
               <h2 className="font-semibold text-sm">News Feed</h2>
             </div>
             <NewsList 
-              onSelectNews={(news) => {
-                setSelectedNews(news);
-                router.push(`/news/${news.id}`);
-              }}
+              onSelectNews={handleSelectNews}
               selectedNewsId={selectedNews?.id}
             />
           </div>
@@ -44,14 +33,12 @@ export default function HomePage() {
 
         {/* Center: Selected News Preview (50%) */}
         <div className="md:col-span-6 md:border-r md:border-border">
-          <div className="h-full overflow-y-auto p-8">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
+          <div className="h-full overflow-y-auto">
+            {selectedNews ? (
+              <NewsDetailView newsId={selectedNews.id} />
             ) : (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center">
+                <div className="text-center p-8">
                   <h2 className="text-xl font-semibold mb-2">Select a news item</h2>
                   <p className="text-muted-foreground">
                     Choose a news article from the left panel to view details
@@ -73,13 +60,22 @@ export default function HomePage() {
       {/* Mobile Layout */}
       <div className="md:hidden">
         <div className="h-screen overflow-y-auto">
-          <NewsList 
-            onSelectNews={(news) => {
-              setSelectedNews(news);
-              router.push(`/news/${news.id}`);
-            }}
-            selectedNewsId={selectedNews?.id}
-          />
+          {selectedNews ? (
+            <>
+              <NewsDetailView newsId={selectedNews.id} />
+              <button 
+                onClick={() => setSelectedNews(null)}
+                className="fixed bottom-4 right-4 bg-primary text-primary-foreground px-4 py-2 rounded-full shadow-lg z-50"
+              >
+                ← Back to list
+              </button>
+            </>
+          ) : (
+            <NewsList 
+              onSelectNews={handleSelectNews}
+              selectedNewsId={undefined}
+            />
+          )}
         </div>
       </div>
     </div>
