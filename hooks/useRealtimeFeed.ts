@@ -37,6 +37,35 @@ export function useRealtimeFeed({
   const backoffCountRef = useRef(0);
   const lastSuccessRef = useRef(Date.now());
 
+  // Sync cursor when initialCursor prop changes
+  useEffect(() => {
+    if (initialCursor && cursorRef.current !== initialCursor) {
+      console.log('[useRealtimeFeed] Cursor updated:', {
+        old: cursorRef.current,
+        new: initialCursor
+      });
+      cursorRef.current = initialCursor;
+    }
+  }, [initialCursor]);
+
+  // Log initialization
+  useEffect(() => {
+    console.log('[useRealtimeFeed] Initialized with:', {
+      initialCursor,
+      enabled,
+      isConnected,
+      connectionType,
+    });
+  }, []); // Only on mount
+
+  // Log enabled changes
+  useEffect(() => {
+    console.log('[useRealtimeFeed] Enabled changed:', enabled);
+    if (!enabled) {
+      console.log('[useRealtimeFeed] Polling disabled - will not start');
+    }
+  }, [enabled]);
+
   // Exponential backoff calculation: 10s → 20s → 40s → 80s → 120s (max)
   const getBackoffDelay = useCallback(() => {
     const baseDelay = 10000; // 10s
