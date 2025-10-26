@@ -115,10 +115,12 @@ export function useRealtimeFeed({
 
     const poll = async () => {
       try {
+        console.log('[Polling] Fetching new news after:', cursorRef.current);
         const response = await fetch(`/api/news?after=${encodeURIComponent(cursorRef.current)}&limit=50`);
         
         if (response.status === 304) {
           // No changes
+          console.log('[Polling] No changes (304)');
           updateHeartbeat();
           return;
         }
@@ -129,17 +131,21 @@ export function useRealtimeFeed({
 
         const data = await response.json();
         if (data.data && data.data.length > 0) {
+          console.log('[Polling] Received', data.data.length, 'new items');
           onItems(data.data, data.data[0].published_at);
           cursorRef.current = data.data[0].published_at;
           updateHeartbeat();
+        } else {
+          console.log('[Polling] No new items');
         }
       } catch (error) {
-        console.error('Polling error:', error);
+        console.error('[Polling] Error:', error);
         onError?.(error as Error);
       }
     };
 
     // Start polling immediately
+    console.log('[Polling] Starting polling connection...');
     poll();
 
     // Set up interval polling
@@ -150,7 +156,7 @@ export function useRealtimeFeed({
     setIsConnected(true);
     resetBackoff();
     updateHeartbeat();
-    console.log('Polling connected');
+    console.log('[Polling] Connected, polling every 5s');
   }, [enabled, onItems, onError, updateHeartbeat, resetBackoff, disconnect]);
 
   // Update polling ref
@@ -169,11 +175,12 @@ export function useRealtimeFeed({
       eventSource.addEventListener('insert', (event) => {
         try {
           const data = JSON.parse(event.data) as StreamInsertEvent;
+          console.log('[SSE] Received insert event:', data.items.length, 'items');
           onItems(data.items, data.cursor);
           cursorRef.current = data.cursor;
           updateHeartbeat();
         } catch (error) {
-          console.error('SSE insert parse error:', error);
+          console.error('[SSE] Insert parse error:', error);
           onError?.(error as Error);
         }
       });

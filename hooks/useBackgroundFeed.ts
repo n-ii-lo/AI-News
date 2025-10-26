@@ -20,6 +20,7 @@ interface UseBackgroundFeedReturn {
   flush: () => void;
   disconnect: () => void;
   addItems: (items: News[], newCursor: string) => void;
+  appendToVisible: (items: News[]) => void;
   setLive: (live: boolean) => void;
 }
 
@@ -96,6 +97,21 @@ export function useBackgroundFeed({
     setStaged([]);
   }, [staged, maxVisible]);
 
+  // Append items directly to visible (for pagination)
+  const appendToVisible = useCallback((items: News[]) => {
+    console.log('[useBackgroundFeed] Append to visible:', items.length, 'items');
+    setVisible(prev => {
+      const deduped = dedupeItems(items, prev);
+      const merged = [...prev, ...deduped];
+      // Sort by published_at descending
+      const sorted = merged
+        .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+        .slice(0, maxVisible);
+      
+      return sorted;
+    });
+  }, [dedupeItems, maxVisible]);
+
   // Force flush (admin/debug)
   const flush = useCallback(() => {
     if (batchTimeoutRef.current) {
@@ -144,6 +160,7 @@ export function useBackgroundFeed({
     flush,
     disconnect,
     addItems,
+    appendToVisible,
     setLive: setIsLive,
   };
 }
