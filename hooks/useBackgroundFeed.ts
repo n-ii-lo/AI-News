@@ -52,6 +52,8 @@ export function useBackgroundFeed({
 
   // Add items to staging buffer with batching
   const addItems = useCallback((items: News[], newCursor: string) => {
+    console.log(`[BackgroundFeed] 🔄 Adding ${items.length} items to buffer`);
+    
     // Clear existing batch timeout
     if (batchTimeoutRef.current) {
       clearTimeout(batchTimeoutRef.current);
@@ -63,13 +65,19 @@ export function useBackgroundFeed({
 
     // Set up new batch timeout
     batchTimeoutRef.current = setTimeout(() => {
+      console.log(`[BackgroundFeed] ⚙️  Processing ${pendingItemsRef.current.length} pending items`);
+      
       const itemsToStage = dedupeItems(pendingItemsRef.current, [...visible, ...staged]);
+      
+      console.log(`[BackgroundFeed] ✨ ${itemsToStage.length} unique items to stage (was ${pendingItemsRef.current.length}, ${pendingItemsRef.current.length - itemsToStage.length} duplicates)`);
       
       if (itemsToStage.length > 0) {
         setStaged(prev => {
           const combined = [...prev, ...itemsToStage];
           // Cap staged items at maxBuffer
-          return combined.slice(-maxBuffer);
+          const capped = combined.slice(-maxBuffer);
+          console.log(`[BackgroundFeed] 📦 Staged: ${capped.length} items (buffer limit: ${maxBuffer})`);
+          return capped;
         });
         
         setCursor(pendingCursorRef.current);
@@ -82,7 +90,12 @@ export function useBackgroundFeed({
 
   // Merge staged items into visible
   const mergeNow = useCallback(() => {
-    if (staged.length === 0) return;
+    if (staged.length === 0) {
+      console.log('[BackgroundFeed] ℹ️  Merge called but no staged items');
+      return;
+    }
+
+    console.log(`[BackgroundFeed] ⬆️  Merging ${staged.length} staged items into visible`);
 
     setVisible(prev => {
       const merged = [...staged, ...prev];
@@ -90,6 +103,8 @@ export function useBackgroundFeed({
       const sorted = merged
         .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
         .slice(0, maxVisible);
+      
+      console.log(`[BackgroundFeed] ✅ Visible: ${sorted.length} items (limit: ${maxVisible})`);
       
       return sorted;
     });
@@ -99,16 +114,20 @@ export function useBackgroundFeed({
 
   // Append items directly to visible (for pagination)
   const appendToVisible = useCallback((items: News[]) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[useBackgroundFeed] Append to visible:', items.length, 'items');
-    }
+    console.log(`[BackgroundFeed] 📄 Appending ${items.length} items for pagination`);
+    
     setVisible(prev => {
       const deduped = dedupeItems(items, prev);
+      const beforeCount = prev.length;
+      console.log(`[BackgroundFeed] 🔤 ${deduped.length} unique items to append (${items.length - deduped.length} duplicates filtered)`);
+      
       const merged = [...prev, ...deduped];
       // Sort by published_at descending and cap at maxVisible
       const sorted = merged
         .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
         .slice(0, maxVisible);
+      
+      console.log(`[BackgroundFeed] 📊 Pagination: ${beforeCount} → ${sorted.length} items`);
       
       return sorted;
     });

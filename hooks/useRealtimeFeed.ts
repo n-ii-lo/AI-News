@@ -68,13 +68,14 @@ export function useRealtimeFeed({
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
+    const url = `/api/news?after=${encodeURIComponent(cursorRef.current)}&limit=50`;
+    
     try {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[Polling] Fetching news after:', cursorRef.current);
-      }
+      console.log('[Polling] 📡 Fetching news after:', cursorRef.current);
+      console.log('[Polling] 🔗 URL:', url);
 
       const data = await fetchJSON<NewsApiResponse>(
-        `/api/news?after=${encodeURIComponent(cursorRef.current)}&limit=50`,
+        url,
         { 
           signal,
           headers: {
@@ -83,37 +84,44 @@ export function useRealtimeFeed({
         }
       );
 
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        console.log('[Polling] ⏹️  Request aborted');
+        return;
+      }
 
       if (data.data && data.data.length > 0) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('[Polling] Received', data.data.length, 'new items');
-        }
+        console.log(`[Polling] ✅ Received ${data.data.length} new items`);
+        console.log('[Polling] 🆔 Item IDs:', data.data.map(item => item.id).slice(0, 5));
         
         // Update cursor to the most recent item
         const newCursor = data.data[0].published_at;
+        console.log('[Polling] 📍 New cursor:', newCursor);
+        
         onItems(data.data, newCursor);
         cursorRef.current = newCursor;
         
         // Reset backoff on success
+        if (backoffCountRef.current > 0) {
+          console.log('[Polling] 🔄 Resetting backoff');
+        }
         resetBackoff();
       } else {
-        // Empty response - no new items
+        console.log('[Polling] ℹ️  No new items (empty response)');
         resetBackoff();
       }
     } catch (error) {
       if (signal.aborted) return;
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('[Polling] Error:', error);
-      }
+      console.error('[Polling] ❌ Error:', error);
+      console.error('[Polling] 📊 Backoff count:', backoffCountRef.current + 1);
       
       onError?.(error as Error);
       
       // Increment backoff for next poll
       incrementBackoff();
+      console.log('[Polling] ⬆️  Incremented backoff, next delay:', getBackoffDelay());
     }
-  }, [enabled, onItems, onError, resetBackoff, incrementBackoff]);
+  }, [enabled, onItems, onError, resetBackoff, incrementBackoff, getBackoffDelay]);
 
   // Start polling with current interval
   const startPolling = useCallback(() => {
@@ -121,28 +129,31 @@ export function useRealtimeFeed({
 
     // Clear existing interval
     if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
+      clearTimeout(pollingIntervalRef.current);
     }
 
+    // First poll immediately
+    console.log('[Polling] 🚀 Starting polling...');
+    poll();
+
+    // Schedule next polls
     const scheduleNext = () => {
       const delay = backoffCountRef.current > 0 ? getBackoffDelay() : 10000; // 10s normal, backoff on error
 
-      pollingIntervalRef.current = setTimeout(() => {
-        scheduleNext();
-      }, delay);
+      console.log(`[Polling] ⏰ Scheduling next poll in ${delay}ms (backoff: ${backoffCountRef.current})`);
 
-      poll();
+      pollingIntervalRef.current = setTimeout(() => {
+        poll();
+        scheduleNext(); // Reschedule after poll completes
+      }, delay);
     };
 
-    // Start the chain
     scheduleNext();
 
     setIsConnected(true);
     setConnectionType('polling');
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[Polling] Started with 10s interval');
-    }
+    console.log('[Polling] ✅ Started with 10s interval');
   }, [enabled, poll, getBackoffDelay]);
 
   // Disconnect
