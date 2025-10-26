@@ -31,6 +31,8 @@ export function useRealtimeFeed({
   const eventSourceRef = useRef<EventSource | undefined>(undefined);
   const channelRef = useRef<any>(undefined);
   const pollingIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const connectSSERef = useRef<() => void>(() => {});
+  const connectPollingRef = useRef<() => void>(() => {});
   
   const backoffCountRef = useRef(0);
   const lastHeartbeatRef = useRef(Date.now());
@@ -66,7 +68,7 @@ export function useRealtimeFeed({
       const timeSinceLastHeartbeat = Date.now() - lastHeartbeatRef.current;
       if (timeSinceLastHeartbeat > 20000) { // 20s timeout
         console.warn('Heartbeat timeout, reconnecting...');
-        reconnect();
+        window.location.reload(); // Reload page as fallback
       }
     }, 25000); // Check every 25s
   }, []);
@@ -77,101 +79,39 @@ export function useRealtimeFeed({
     setupHeartbeatWatchdog();
   }, [setupHeartbeatWatchdog]);
 
-  // Supabase Realtime connection
-  const connectRealtime = useCallback(() => {
-    if (!enabled) return;
+  // Disconnect all connections
+  const disconnect = useCallback(() => {
+    setIsConnected(false);
+    setConnectionType('none');
 
-    try {
-      const channel = supabase
-        .channel('news-inserts')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'news',
-        }, (payload) => {
-          const newItem = payload.new as News;
-          
-          // Filter by cursor to only get newer items
-          if (new Date(newItem.published_at) > new Date(cursorRef.current)) {
-            onItems([newItem], newItem.published_at);
-            cursorRef.current = newItem.published_at;
-            updateHeartbeat();
-          }
-        })
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            setConnectionType('realtime');
-            setIsConnected(true);
-            resetBackoff();
-            updateHeartbeat();
-            console.log('Supabase Realtime connected');
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn('Supabase Realtime failed, falling back to SSE');
-            connectSSE();
-          }
-        });
-
-      channelRef.current = channel;
-    } catch (error) {
-      console.error('Supabase Realtime error:', error);
-      connectSSE();
+    // Clear timeouts
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
     }
-  }, [enabled, onItems, updateHeartbeat, resetBackoff]);
-
-  // SSE connection
-  const connectSSE = useCallback(() => {
-    if (!enabled) return;
-
-    try {
-      const url = `/api/news/stream?after=${encodeURIComponent(cursorRef.current)}`;
-      const eventSource = new EventSource(url);
-
-      eventSource.addEventListener('insert', (event) => {
-        try {
-          const data = JSON.parse(event.data) as StreamInsertEvent;
-          onItems(data.items, data.cursor);
-          cursorRef.current = data.cursor;
-          updateHeartbeat();
-        } catch (error) {
-          console.error('SSE insert parse error:', error);
-          onError?.(error as Error);
-        }
-      });
-
-      eventSource.addEventListener('heartbeat', (event) => {
-        try {
-          const data = JSON.parse(event.data) as StreamHeartbeat;
-          lastHeartbeatRef.current = data.ts;
-          updateHeartbeat();
-        } catch (error) {
-          console.error('SSE heartbeat parse error:', error);
-        }
-      });
-
-      eventSource.addEventListener('connected', () => {
-        setConnectionType('sse');
-        setIsConnected(true);
-        resetBackoff();
-        updateHeartbeat();
-        console.log('SSE connected');
-      });
-
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
-        eventSource.close();
-        connectPolling();
-      };
-
-      eventSourceRef.current = eventSource;
-    } catch (error) {
-      console.error('SSE connection error:', error);
-      connectPolling();
+    if (heartbeatTimeoutRef.current) {
+      clearTimeout(heartbeatTimeoutRef.current);
     }
-  }, [enabled, onItems, onError, updateHeartbeat, resetBackoff]);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    // Close connections
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = undefined;
+    }
+
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = undefined;
+    }
+  }, []);
 
   // Polling fallback
   const connectPolling = useCallback(() => {
     if (!enabled) return;
+
+    disconnect();
 
     const poll = async () => {
       try {
@@ -211,35 +151,109 @@ export function useRealtimeFeed({
     resetBackoff();
     updateHeartbeat();
     console.log('Polling connected');
-  }, [enabled, onItems, onError, updateHeartbeat, resetBackoff]);
+  }, [enabled, onItems, onError, updateHeartbeat, resetBackoff, disconnect]);
 
-  // Disconnect all connections
-  const disconnect = useCallback(() => {
-    setIsConnected(false);
-    setConnectionType('none');
+  // Update polling ref
+  connectPollingRef.current = connectPolling;
 
-    // Clear timeouts
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    if (heartbeatTimeoutRef.current) {
-      clearTimeout(heartbeatTimeoutRef.current);
-    }
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
+  // SSE connection
+  const connectSSE = useCallback(() => {
+    if (!enabled) return;
 
-    // Close connections
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = undefined;
-    }
+    disconnect();
 
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = undefined;
+    try {
+      const url = `/api/news/stream?after=${encodeURIComponent(cursorRef.current)}`;
+      const eventSource = new EventSource(url);
+
+      eventSource.addEventListener('insert', (event) => {
+        try {
+          const data = JSON.parse(event.data) as StreamInsertEvent;
+          onItems(data.items, data.cursor);
+          cursorRef.current = data.cursor;
+          updateHeartbeat();
+        } catch (error) {
+          console.error('SSE insert parse error:', error);
+          onError?.(error as Error);
+        }
+      });
+
+      eventSource.addEventListener('heartbeat', (event) => {
+        try {
+          const data = JSON.parse(event.data) as StreamHeartbeat;
+          lastHeartbeatRef.current = data.ts;
+          updateHeartbeat();
+        } catch (error) {
+          console.error('SSE heartbeat parse error:', error);
+        }
+      });
+
+      eventSource.addEventListener('connected', () => {
+        setConnectionType('sse');
+        setIsConnected(true);
+        resetBackoff();
+        updateHeartbeat();
+        console.log('SSE connected');
+      });
+
+      eventSource.onerror = () => {
+        console.error('SSE error, falling back to polling');
+        eventSource.close();
+        connectPollingRef.current();
+      };
+
+      eventSourceRef.current = eventSource;
+    } catch (error) {
+      console.error('SSE connection error:', error);
+      connectPollingRef.current();
     }
-  }, []);
+  }, [enabled, onItems, onError, updateHeartbeat, resetBackoff, disconnect]);
+
+  // Update SSE ref
+  connectSSERef.current = connectSSE;
+
+  // Supabase Realtime connection
+  const connectRealtime = useCallback(() => {
+    if (!enabled) return;
+
+    disconnect();
+
+    try {
+      const channel = supabase
+        .channel('news-inserts')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'news',
+        }, (payload) => {
+          const newItem = payload.new as News;
+          
+          // Filter by cursor to only get newer items
+          if (new Date(newItem.published_at) > new Date(cursorRef.current)) {
+            onItems([newItem], newItem.published_at);
+            cursorRef.current = newItem.published_at;
+            updateHeartbeat();
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            setConnectionType('realtime');
+            setIsConnected(true);
+            resetBackoff();
+            updateHeartbeat();
+            console.log('Supabase Realtime connected');
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('Supabase Realtime failed, falling back to SSE');
+            connectSSERef.current();
+          }
+        });
+
+      channelRef.current = channel;
+    } catch (error) {
+      console.error('Supabase Realtime error:', error);
+      connectSSERef.current();
+    }
+  }, [enabled, onItems, updateHeartbeat, resetBackoff, disconnect]);
 
   // Main reconnect function
   const reconnect = useCallback(() => {

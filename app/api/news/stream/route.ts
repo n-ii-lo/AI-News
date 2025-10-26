@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
           // Get new news since last cursor
           const newNews = await db.getNews({
             cursor: lastCursor,
-            limit: 50,
-            status: 'done' // Only get processed news
+            limit: 50
+            // No status filter - get all new news regardless of status
           });
           
           if (newNews.length > 0) {
