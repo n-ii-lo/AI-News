@@ -68,7 +68,7 @@ export function useBackgroundFeed({
       if (itemsToStage.length > 0) {
         setStaged(prev => {
           const combined = [...prev, ...itemsToStage];
-          // Cap staged items
+          // Cap staged items at maxBuffer
           return combined.slice(-maxBuffer);
         });
         
@@ -86,7 +86,7 @@ export function useBackgroundFeed({
 
     setVisible(prev => {
       const merged = [...staged, ...prev];
-      // Cap visible items and maintain order by published_at
+      // Cap visible items at maxVisible and maintain order by published_at descending
       const sorted = merged
         .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
         .slice(0, maxVisible);
@@ -99,11 +99,13 @@ export function useBackgroundFeed({
 
   // Append items directly to visible (for pagination)
   const appendToVisible = useCallback((items: News[]) => {
-    console.log('[useBackgroundFeed] Append to visible:', items.length, 'items');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[useBackgroundFeed] Append to visible:', items.length, 'items');
+    }
     setVisible(prev => {
       const deduped = dedupeItems(items, prev);
       const merged = [...prev, ...deduped];
-      // Sort by published_at descending
+      // Sort by published_at descending and cap at maxVisible
       const sorted = merged
         .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
         .slice(0, maxVisible);

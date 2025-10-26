@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { News, StreamInsertEvent, StreamHeartbeat } from '@/lib/schemas';
+import { fetchJSON } from '@/lib/fetchJSON';
+import type { News } from '@/lib/schemas';
 
 interface UseRealtimeFeedOptions {
   initialCursor?: string;
@@ -11,9 +11,15 @@ interface UseRealtimeFeedOptions {
 
 interface UseRealtimeFeedReturn {
   isConnected: boolean;
-  connectionType: 'realtime' | 'sse' | 'polling' | 'none';
+  connectionType: 'polling' | 'none';
   reconnect: () => void;
   disconnect: () => void;
+}
+
+interface NewsApiResponse {
+  data: News[];
+  hasMore?: boolean;
+  total?: number;
 }
 
 export function useRealtimeFeed({
@@ -23,305 +29,180 @@ export function useRealtimeFeed({
   enabled = true,
 }: UseRealtimeFeedOptions): UseRealtimeFeedReturn {
   const [isConnected, setIsConnected] = useState(false);
-  const [connectionType, setConnectionType] = useState<'realtime' | 'sse' | 'polling' | 'none'>('none');
+  const [connectionType, setConnectionType] = useState<'polling' | 'none'>('none');
   
   const cursorRef = useRef(initialCursor);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const heartbeatTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const eventSourceRef = useRef<EventSource | undefined>(undefined);
-  const channelRef = useRef<any>(undefined);
   const pollingIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const connectSSERef = useRef<() => void>(() => {});
-  const connectPollingRef = useRef<() => void>(() => {});
-  
+  const abortControllerRef = useRef<AbortController | undefined>(undefined);
   const backoffCountRef = useRef(0);
-  const lastHeartbeatRef = useRef(Date.now());
-  const isReconnectingRef = useRef(false);
+  const lastSuccessRef = useRef(Date.now());
 
-  // Exponential backoff calculation
+  // Exponential backoff calculation: 10s → 20s → 40s → 80s → 120s (max)
   const getBackoffDelay = useCallback(() => {
-    const baseDelay = 500; // 0.5s
-    const maxDelay = 30000; // 30s
+    const baseDelay = 10000; // 10s
+    const maxDelay = 120000; // 2min
     const delay = Math.min(baseDelay * Math.pow(2, backoffCountRef.current), maxDelay);
     return delay;
   }, []);
 
-  // Reset backoff on successful connection
+  // Reset backoff on successful fetch
   const resetBackoff = useCallback(() => {
     backoffCountRef.current = 0;
-    isReconnectingRef.current = false;
+    lastSuccessRef.current = Date.now();
   }, []);
 
-  // Increment backoff for next attempt
+  // Increment backoff for next poll
   const incrementBackoff = useCallback(() => {
-    backoffCountRef.current++;
-    isReconnectingRef.current = true;
+    backoffCountRef.current = Math.min(backoffCountRef.current + 1, 5); // Cap at 5 (2min max)
   }, []);
 
-  // Heartbeat watchdog
-  const setupHeartbeatWatchdog = useCallback(() => {
-    if (heartbeatTimeoutRef.current) {
-      clearTimeout(heartbeatTimeoutRef.current);
+  // Core polling function
+  const poll = useCallback(async () => {
+    if (!enabled || document.hidden) return;
+
+    // Cancel previous request if still running
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
 
-    heartbeatTimeoutRef.current = setTimeout(() => {
-      const timeSinceLastHeartbeat = Date.now() - lastHeartbeatRef.current;
-      if (timeSinceLastHeartbeat > 20000) { // 20s timeout
-        console.warn('Heartbeat timeout, reconnecting...');
-        window.location.reload(); // Reload page as fallback
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    try {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[Polling] Fetching news after:', cursorRef.current);
       }
-    }, 25000); // Check every 25s
-  }, []);
 
-  // Update heartbeat timestamp
-  const updateHeartbeat = useCallback(() => {
-    lastHeartbeatRef.current = Date.now();
-    setupHeartbeatWatchdog();
-  }, [setupHeartbeatWatchdog]);
+      const data = await fetchJSON<NewsApiResponse>(
+        `/api/news?after=${encodeURIComponent(cursorRef.current)}&limit=50`,
+        { 
+          signal,
+          headers: {
+            'Cache-Control': 'no-cache',
+          }
+        }
+      );
 
-  // Disconnect all connections
-  const disconnect = useCallback(() => {
-    setIsConnected(false);
-    setConnectionType('none');
+      if (signal.aborted) return;
 
-    // Clear timeouts
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
+      if (data.data && data.data.length > 0) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[Polling] Received', data.data.length, 'new items');
+        }
+        
+        // Update cursor to the most recent item
+        const newCursor = data.data[0].published_at;
+        onItems(data.data, newCursor);
+        cursorRef.current = newCursor;
+        
+        // Reset backoff on success
+        resetBackoff();
+      } else {
+        // Empty response - no new items
+        resetBackoff();
+      }
+    } catch (error) {
+      if (signal.aborted) return;
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[Polling] Error:', error);
+      }
+      
+      onError?.(error as Error);
+      
+      // Increment backoff for next poll
+      incrementBackoff();
     }
-    if (heartbeatTimeoutRef.current) {
-      clearTimeout(heartbeatTimeoutRef.current);
-    }
+  }, [enabled, onItems, onError, resetBackoff, incrementBackoff]);
+
+  // Start polling with current interval
+  const startPolling = useCallback(() => {
+    if (!enabled) return;
+
+    // Clear existing interval
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
     }
 
-    // Close connections
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = undefined;
+    const scheduleNext = () => {
+      const delay = backoffCountRef.current > 0 ? getBackoffDelay() : 10000; // 10s normal, backoff on error
+
+      pollingIntervalRef.current = setTimeout(() => {
+        scheduleNext();
+      }, delay);
+
+      poll();
+    };
+
+    // Start the chain
+    scheduleNext();
+
+    setIsConnected(true);
+    setConnectionType('polling');
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Polling] Started with 10s interval');
+    }
+  }, [enabled, poll, getBackoffDelay]);
+
+  // Disconnect
+  const disconnect = useCallback(() => {
+    setIsConnected(false);
+    setConnectionType('none');
+
+    if (pollingIntervalRef.current) {
+      clearTimeout(pollingIntervalRef.current);
+      pollingIntervalRef.current = undefined;
     }
 
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = undefined;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = undefined;
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Polling] Disconnected');
     }
   }, []);
 
-  // Polling fallback
-  const connectPolling = useCallback(() => {
-    if (!enabled) return;
-
-    disconnect();
-
-    const poll = async () => {
-      try {
-        console.log('[Polling] Fetching new news after:', cursorRef.current);
-        const response = await fetch(`/api/news?after=${encodeURIComponent(cursorRef.current)}&limit=50`);
-        
-        if (response.status === 304) {
-          // No changes
-          console.log('[Polling] No changes (304)');
-          updateHeartbeat();
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.data && data.data.length > 0) {
-          console.log('[Polling] Received', data.data.length, 'new items');
-          onItems(data.data, data.data[0].published_at);
-          cursorRef.current = data.data[0].published_at;
-          updateHeartbeat();
-        } else {
-          console.log('[Polling] No new items');
-        }
-      } catch (error) {
-        console.error('[Polling] Error:', error);
-        onError?.(error as Error);
-      }
-    };
-
-    // Start polling immediately
-    console.log('[Polling] Starting polling connection...');
-    poll();
-
-    // Set up interval polling
-    const interval = setInterval(poll, 5000); // Poll every 5s
-    pollingIntervalRef.current = interval;
-
-    setConnectionType('polling');
-    setIsConnected(true);
-    resetBackoff();
-    updateHeartbeat();
-    console.log('[Polling] Connected, polling every 5s');
-  }, [enabled, onItems, onError, updateHeartbeat, resetBackoff, disconnect]);
-
-  // Update polling ref
-  connectPollingRef.current = connectPolling;
-
-  // SSE connection
-  const connectSSE = useCallback(() => {
-    if (!enabled) return;
-
-    disconnect();
-
-    try {
-      const url = `/api/news/stream?after=${encodeURIComponent(cursorRef.current)}`;
-      const eventSource = new EventSource(url);
-
-      eventSource.addEventListener('insert', (event) => {
-        try {
-          const data = JSON.parse(event.data) as StreamInsertEvent;
-          console.log('[SSE] Received insert event:', data.items.length, 'items');
-          onItems(data.items, data.cursor);
-          cursorRef.current = data.cursor;
-          updateHeartbeat();
-        } catch (error) {
-          console.error('[SSE] Insert parse error:', error);
-          onError?.(error as Error);
-        }
-      });
-
-      eventSource.addEventListener('heartbeat', (event) => {
-        try {
-          const data = JSON.parse(event.data) as StreamHeartbeat;
-          lastHeartbeatRef.current = data.ts;
-          updateHeartbeat();
-        } catch (error) {
-          console.error('SSE heartbeat parse error:', error);
-        }
-      });
-
-      eventSource.addEventListener('connected', () => {
-        setConnectionType('sse');
-        setIsConnected(true);
-        resetBackoff();
-        updateHeartbeat();
-        console.log('SSE connected');
-      });
-
-      eventSource.onerror = () => {
-        console.error('SSE error, falling back to polling');
-        eventSource.close();
-        connectPollingRef.current();
-      };
-
-      eventSourceRef.current = eventSource;
-    } catch (error) {
-      console.error('SSE connection error:', error);
-      connectPollingRef.current();
-    }
-  }, [enabled, onItems, onError, updateHeartbeat, resetBackoff, disconnect]);
-
-  // Update SSE ref
-  connectSSERef.current = connectSSE;
-
-  // Supabase Realtime connection
-  const connectRealtime = useCallback(() => {
-    if (!enabled) return;
-
-    disconnect();
-
-    try {
-      const channel = supabase
-        .channel('news-inserts')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'news',
-        }, (payload) => {
-          const newItem = payload.new as News;
-          
-          // Filter by cursor to only get newer items
-          if (new Date(newItem.published_at) > new Date(cursorRef.current)) {
-            onItems([newItem], newItem.published_at);
-            cursorRef.current = newItem.published_at;
-            updateHeartbeat();
-          }
-        })
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            setConnectionType('realtime');
-            setIsConnected(true);
-            resetBackoff();
-            updateHeartbeat();
-            console.log('Supabase Realtime connected');
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn('Supabase Realtime failed, falling back to SSE');
-            connectSSERef.current();
-          }
-        });
-
-      channelRef.current = channel;
-    } catch (error) {
-      console.error('Supabase Realtime error:', error);
-      connectSSERef.current();
-    }
-  }, [enabled, onItems, updateHeartbeat, resetBackoff, disconnect]);
-
-  // Main reconnect function
+  // Reconnect
   const reconnect = useCallback(() => {
-    if (isReconnectingRef.current) return;
-
     disconnect();
-    incrementBackoff();
+    resetBackoff();
+    startPolling();
+  }, [disconnect, resetBackoff, startPolling]);
 
-    const delay = getBackoffDelay();
-    console.log(`Reconnecting in ${delay}ms (attempt ${backoffCountRef.current})`);
-
-    reconnectTimeoutRef.current = setTimeout(() => {
-      // Try connections in order of preference
-      if (backoffCountRef.current === 1) {
-        connectRealtime();
-      } else if (backoffCountRef.current <= 3) {
-        connectSSE();
-      } else {
-        connectPolling();
-      }
-    }, delay);
-  }, [disconnect, incrementBackoff, getBackoffDelay, connectRealtime, connectSSE, connectPolling]);
-
-  // Initialize connection
-  useEffect(() => {
-    if (enabled) {
-      connectRealtime();
-    } else {
-      disconnect();
-    }
-
-    return () => {
-      disconnect();
-    };
-  }, [enabled, connectRealtime, disconnect]);
-
-  // Handle visibility change
+  // Handle visibility change - pause/resume
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab hidden - pause SSE, keep heartbeat
-        if (connectionType === 'sse' && eventSourceRef.current) {
-          eventSourceRef.current.close();
-          setIsConnected(false);
+        // Pause polling when tab is hidden
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[Polling] Tab hidden, pausing');
         }
+        if (pollingIntervalRef.current) {
+          clearTimeout(pollingIntervalRef.current);
+        }
+        setIsConnected(false);
       } else {
-        // Tab visible - reconnect if needed
-        if (!isConnected) {
-          reconnect();
+        // Resume polling when tab becomes visible
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[Polling] Tab visible, resuming');
+        }
+        if (enabled && !isConnected) {
+          startPolling();
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [connectionType, isConnected, reconnect]);
+  }, [enabled, isConnected, startPolling]);
 
   // Handle online/offline
   useEffect(() => {
     const handleOnline = () => {
-      if (!isConnected) {
+      if (!isConnected && enabled) {
         reconnect();
       }
     };
@@ -337,7 +218,20 @@ export function useRealtimeFeed({
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [isConnected, reconnect, disconnect]);
+  }, [isConnected, enabled, reconnect, disconnect]);
+
+  // Initialize
+  useEffect(() => {
+    if (enabled) {
+      startPolling();
+    } else {
+      disconnect();
+    }
+
+    return () => {
+      disconnect();
+    };
+  }, [enabled, startPolling, disconnect]);
 
   return {
     isConnected,
