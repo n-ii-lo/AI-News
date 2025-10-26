@@ -136,19 +136,23 @@ export function useRealtimeFeed({
     console.log('[Polling] 🚀 Starting polling...');
     poll();
 
-    // Schedule next polls
+    // Schedule next poll AFTER the first one
     const scheduleNext = () => {
       const delay = backoffCountRef.current > 0 ? getBackoffDelay() : 10000; // 10s normal, backoff on error
 
       console.log(`[Polling] ⏰ Scheduling next poll in ${delay}ms (backoff: ${backoffCountRef.current})`);
 
       pollingIntervalRef.current = setTimeout(() => {
-        poll();
-        scheduleNext(); // Reschedule after poll completes
+        poll().then(() => {
+          scheduleNext(); // Only reschedule after poll completes
+        }).catch(() => {
+          scheduleNext(); // Reschedule even on error
+        });
       }, delay);
     };
 
-    scheduleNext();
+    // Wait a bit before scheduling to let first poll complete
+    setTimeout(scheduleNext, 1000);
 
     setIsConnected(true);
     setConnectionType('polling');
