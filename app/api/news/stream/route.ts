@@ -2,8 +2,6 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/supabase';
 import type { StreamInsertEvent, StreamHeartbeat } from '@/lib/schemas';
 
-export const runtime = 'edge';
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const after = searchParams.get('after');
