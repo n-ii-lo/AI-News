@@ -48,7 +48,7 @@ export function useRealtimeFeed({
     }
   }, [initialCursor]);
 
-  // Log initialization
+  // Log initialization - ALWAYS log, even in production
   useEffect(() => {
     console.log('[useRealtimeFeed] Initialized with:', {
       initialCursor,
@@ -58,11 +58,13 @@ export function useRealtimeFeed({
     });
   }, []); // Only on mount
 
-  // Log enabled changes
+  // Log enabled changes - ALWAYS log
   useEffect(() => {
     console.log('[useRealtimeFeed] Enabled changed:', enabled);
     if (!enabled) {
-      console.log('[useRealtimeFeed] Polling disabled - will not start');
+      console.warn('[useRealtimeFeed] ⚠️ Polling DISABLED - will not start');
+    } else {
+      console.log('[useRealtimeFeed] ✅ Polling ENABLED - will start soon');
     }
   }, [enabled]);
 
